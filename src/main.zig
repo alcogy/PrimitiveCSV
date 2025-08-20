@@ -38,28 +38,18 @@ const p = std.debug.print;
 //     }
 // }
 
-pub fn read(path: []const u8) ![][][]const u8 {
+pub fn read(allocator: *std.mem.Allocator, path: []const u8) ![][][]const u8 {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
     const size = try file.getEndPos();
 
-    var allocator = std.heap.page_allocator;
     const buffer = try allocator.alloc(u8, size);
     defer allocator.free(buffer);
 
     _ = try file.readAll(buffer);
 
-    const table = try read_csv(&allocator, buffer);
-    defer {
-        for (table) |row| {
-            for (row) |cell| {
-                allocator.free(cell);
-            }
-            allocator.free(row);
-        }
-        allocator.free(table);
-    }
+    const table = try read_csv(allocator, buffer);
     return table;
 }
 
@@ -201,7 +191,25 @@ test "read_csv" {
     try std.testing.expect(std.mem.eql(u8, table[1][1], "bo\"dy\n2"));
 }
 
-test "write_csv" {
+test "read" {
+    var allocator = std.testing.allocator;
+    const table = try read(&allocator, "sample.csv");
+    defer {
+        for (table) |row| {
+            for (row) |cell| {
+                allocator.free(cell);
+            }
+            allocator.free(row);
+        }
+        allocator.free(table);
+    }
+    try std.testing.expect(std.mem.eql(u8, table[0][0], "myhead1"));
+    try std.testing.expect(std.mem.eql(u8, table[0][1], "myheader2"));
+    try std.testing.expect(std.mem.eql(u8, table[1][0], "body1"));
+    try std.testing.expect(std.mem.eql(u8, table[1][1], "body2"));
+}
+
+test "write" {
     var allocator = std.testing.allocator;
     const str = "header1,header2\n\"body1\",\"bo\"\"dy\n2\"";
     const table = try read_csv(&allocator, str);
